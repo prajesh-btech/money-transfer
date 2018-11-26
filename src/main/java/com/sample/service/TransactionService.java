@@ -1,10 +1,9 @@
 package com.sample.service;
 
-import com.sample.dao.AccountDao;
-import com.sample.dao.impl.AccountDaoImpl;
+import com.sample.dao.TransactionDao;
 import com.sample.dao.impl.TransactionDaoImpl;
-import com.sample.model.Account;
 import com.sample.model.Transaction;
+import com.sample.util.MoneyTransfer;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
@@ -17,8 +16,7 @@ import java.util.List;
 @Path("transactions")
 public class TransactionService {
 
-    private TransactionDaoImpl transactionDao = new TransactionDaoImpl();
-    private AccountDao accountDao = new AccountDaoImpl();
+    private TransactionDao transactionDao = new TransactionDaoImpl();
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
@@ -46,45 +44,14 @@ public class TransactionService {
     @POST
     @Produces(MediaType.APPLICATION_JSON)
     public Response transferFunds(Transaction transaction) {
-        Account sourceAccount = null;
-        Account destAccount = null;
 
         try {
-            sourceAccount = accountDao.get(new Account(transaction.getSourceAcctNumber()));
-            destAccount = accountDao.get(new Account(transaction.getDestAcctNumber()));
-
-            if (sourceAccount.getBalance() < transaction.getAmount()) {
-                return Response.status(Response.Status.EXPECTATION_FAILED).entity("Insufficient balance in Account: " + sourceAccount).build();
-            }
-
-            commitOrRollbackTransaction(transaction, sourceAccount, destAccount);
+            MoneyTransfer moneyTransfer = new MoneyTransfer();
+            moneyTransfer.transferMoney(transaction);
 
         } catch (Exception e) {
             return Response.status(Response.Status.EXPECTATION_FAILED).entity("Transaction Failed: " + e.getMessage()).build();
         }
         return Response.status(Response.Status.OK).entity(transaction).build();
     }
-
-    private void commitOrRollbackTransaction(Transaction transaction, Account sourceAccount, Account destAccount) {
-        int initialFromAccountBalance = sourceAccount.getBalance();
-        int initialToAccountBalance = destAccount.getBalance();
-
-        sourceAccount.setBalance(initialFromAccountBalance - transaction.getAmount());
-        destAccount.setBalance(initialToAccountBalance + transaction.getAmount());
-
-        try {
-            accountDao.update(sourceAccount);
-            accountDao.update(destAccount);
-            transactionDao.add(transaction);
-        } catch (Exception e) {
-            sourceAccount.setBalance(initialFromAccountBalance);
-            destAccount.setBalance(initialToAccountBalance);
-            accountDao.update(sourceAccount);
-            accountDao.update(destAccount);
-            throw e;
-        }
-
-    }
-
-
 }

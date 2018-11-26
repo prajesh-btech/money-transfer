@@ -1,6 +1,9 @@
 package com.sample.client;
 
+import com.sample.dao.AccountDao;
+import com.sample.dao.impl.AccountDaoImpl;
 import com.sample.data.TransactionUtil;
+import com.sample.model.Account;
 import com.sample.model.Transaction;
 import com.sun.net.httpserver.HttpServer;
 import org.glassfish.jersey.jdkhttp.JdkHttpServerFactory;
@@ -32,6 +35,7 @@ public class TransactionTest {
     private HttpServer server;
     private WebTarget target;
     private Map<Integer, Transaction> transactionsExpectedMap;
+    private AccountDao accountDao = null;
 
     @Before
     public void setUp() throws Exception {
@@ -44,6 +48,7 @@ public class TransactionTest {
         target = c.target(baseUri).path("transactions");
 
         transactionsExpectedMap = TransactionUtil.getTransactionMap();
+        accountDao = new AccountDaoImpl();
     }
 
     @After
@@ -70,14 +75,28 @@ public class TransactionTest {
 
     @Test
     public void testTransferFunds() {
+        int TRANSFER_AMOUNT = 50;
         Invocation.Builder invocationBuilder = target.request(MediaType.APPLICATION_JSON);
         Transaction transaction = new Transaction(102);
         transaction.setSourceAcctNumber(1);
-        transaction.setAmount(50);
+        transaction.setAmount(TRANSFER_AMOUNT);
         transaction.setDestAcctNumber(2);
+
+        Account sourceAccount = accountDao.get(new Account(transaction.getSourceAcctNumber()));
+        Account destAccount = accountDao.get(new Account(transaction.getDestAcctNumber()));
+
+        int initialBalanceOfSourceAccount = sourceAccount.getBalance();
+        int initialBalanceOfDestAccount = destAccount.getBalance();
+
         Response response = invocationBuilder.post(Entity.entity(transaction, MediaType.APPLICATION_JSON));
-        Transaction transactionResponse = response.readEntity(Transaction.class);
-        assertTrue(transactionsExpectedMap.containsKey(transactionResponse.getTransactionId()));
+
+        int expectedSourceAccountBalance = initialBalanceOfSourceAccount - TRANSFER_AMOUNT;
+        int expectedDestAccountBalance =  initialBalanceOfDestAccount + TRANSFER_AMOUNT;
+
+        assertEquals(response.getStatus(),Response.Status.OK.getStatusCode());
+        assertEquals(expectedSourceAccountBalance,sourceAccount.getBalance());
+        assertEquals(expectedDestAccountBalance,destAccount.getBalance());
+
     }
 
     @Test
@@ -87,9 +106,19 @@ public class TransactionTest {
         transaction.setSourceAcctNumber(1);
         transaction.setAmount(500);
         transaction.setDestAcctNumber(2);
+
+        Account sourceAccount = accountDao.get(new Account(transaction.getSourceAcctNumber()));
+        Account destAccount = accountDao.get(new Account(transaction.getDestAcctNumber()));
+
+        int initialBalanceOfSourceAccount = sourceAccount.getBalance();
+        int initialBalanceOfDestAccount = destAccount.getBalance();
+
         Response response = invocationBuilder.post(Entity.entity(transaction, MediaType.APPLICATION_JSON));
         String responseMsg = response.readEntity(String.class);
+
         assertTrue(responseMsg.contains("Insufficient balance in Account"));
+        assertEquals(initialBalanceOfSourceAccount,sourceAccount.getBalance());
+        assertEquals(initialBalanceOfDestAccount,destAccount.getBalance());
     }
 
     @Test
@@ -99,8 +128,18 @@ public class TransactionTest {
         transaction.setSourceAcctNumber(1);
         transaction.setAmount(50);
         transaction.setDestAcctNumber(2);
+
+        Account sourceAccount = accountDao.get(new Account(transaction.getSourceAcctNumber()));
+        Account destAccount = accountDao.get(new Account(transaction.getDestAcctNumber()));
+
+        int initialBalanceOfSourceAccount = sourceAccount.getBalance();
+        int initialBalanceOfDestAccount = destAccount.getBalance();
+
         Response response = invocationBuilder.post(Entity.entity(transaction, MediaType.APPLICATION_JSON));
         String responseMsg = response.readEntity(String.class);
+
         assertTrue(responseMsg.contains("Invalid TransactionId entered"));
+        assertEquals(initialBalanceOfSourceAccount,sourceAccount.getBalance());
+        assertEquals(initialBalanceOfDestAccount,destAccount.getBalance());
     }
 }
